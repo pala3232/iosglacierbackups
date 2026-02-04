@@ -4,6 +4,13 @@
 # Python
 __pycache__/
 
+# Backup script specific files
+successful-uploads.log
+failed-uploads.log
+currentfilesinbucket.log
+uploaded-files.txt
+failed-uploads.txt
+
 # Terraform
 .terraform/
 .terraform.lock.hcl

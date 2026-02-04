@@ -1,6 +1,7 @@
 import boto3
 import logging
 import os
+import subprocess
 from datetime import datetime
 from PIL import Image, ExifTags
 
@@ -15,18 +16,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # AWS S3 user configuration
-filepath_root = 'C:/YOUR/FILE/PATH'
+filepath_root = 'C:/Your/Path'
 storage_class = 'DEEP_ARCHIVE'
 # AWS S3 bucket configuration  
-fallback_bucket_name = None  # Fallback if TF not available. Change if needed
+fallback_bucket_name = "your-ios-backup-bucket-name"  # Fallback if TF not available. Change if needed
 
 try:
     # Try to get bucket name from terraform output
     result = subprocess.run(['terraform', 'output', '-raw', 'bucket_name'], 
-                           capture_output=True, text=True, cwd='.')
-    bucket_name = result.stdout.strip() if result.returncode == 0 else fallback_bucket_name
+                           capture_output=True, text=True, cwd='../terraform')
+    # Check if the output is valid (not a warning message)
+    output = result.stdout.strip()
+    if result.returncode == 0 and output and not output.startswith('╷'):
+        bucket_name = output
+    else:
+        bucket_name = fallback_bucket_name
 except:
     bucket_name = fallback_bucket_name
+
+print(f"Using S3 bucket: {bucket_name}")
     
 # File tracking configuration
 successful_uploads = 'successful-uploads.log'
@@ -55,7 +63,6 @@ def get_exif_datetime(file_path):
         return None
     return None
 
-import subprocess
 import json
 
 def get_video_creation_time(file_path):

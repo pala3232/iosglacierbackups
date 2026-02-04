@@ -15,16 +15,17 @@ terraform {
 
 # AWS Provider region. Change if needed
 provider "aws" {
-  region = "us-east-1"
+  region = "ap-southeast-2"
 }
 
 
 # Create a random string
 resource "random_string" "random" {
-  length           = 16
-  special          = false
-  override_special = "/@£$"
-  lower = true
+  length  = 16
+  special = false
+  upper   = false
+  lower   = true
+  numeric = true
 }
 
 # Create the S3 bucket
