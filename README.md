@@ -42,7 +42,7 @@ pip install -r requirements.txt
 **Windows:** `choco install ffmpeg` or download from ffmpeg.org
 
 ### Configure
-1. Update `filepath_root` in uptest2.py to point to your photo folder
+1. Update `filepath_root` in upload.py to point to your photo folder
 2. Either:
    - Use Terraform to create bucket (recommended), OR
    - Set `fallback_bucket_name` in the script to your bucket name
@@ -57,11 +57,11 @@ python upload.py
 ```
 
 ### Manual setup
-If you don't want to use Terraform, just set the bucket name in uptest2.py:
+If you don't want to use Terraform, just set the bucket name in upload.py:
 ```python
 fallback_bucket_name = 'your-bucket-name-here'  
 ```
-
+Note: Storage Class can also be set up with the storage_class variable. Default value is 'DEEP_ARCHIVE'.
 ## File organization in S3
 ```
 ios/
