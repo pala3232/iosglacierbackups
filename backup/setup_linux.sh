@@ -14,4 +14,4 @@ cd ../terraform/
 terraform init
 terraform apply -auto-approve
 echo "Setup complete!"
-echo "Now just run: python uptest2.py | Everything will be backed up!"
+echo "Now just run: python upload.py | Everything will be backed up!"

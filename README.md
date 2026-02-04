@@ -1,91 +1,178 @@
-# iOS Backup to S3
+# iOS Backup to S3 Glacier Deep Archive
 
-Python script that backs up photos and videos to AWS S3 with automatic metadata extraction and organization by date.
+Cloud photo storage gets expensive fast when you have thousands of iPhone photos. This script automates backups to AWS S3 Glacier Deep Archive for a fraction of the cost of traditional cloud storage services.
 
 ## What it does
 
-- Scans your iOS photo/video folder 
-- Extracts creation dates from EXIF data (photos) and metadata (videos)
-- Organizes files by year/month in S3
-- Skips duplicates
-- Uses S3 Deep Archive for cost savings
-- Handles multipart uploads automatically for large files (upload_file())
+- Scans your iOS backup folder for photos/videos (JPEG, HEIC, MP4, MOV)
+- Extracts dates from EXIF data so everything gets organized properly
+- Skips files that are already uploaded (no duplicates)
+- Uploads everything to S3 with a clean folder structure like `ios/2025/02/2025-02-04_photo.jpg`
+- Keeps detailed logs so you know what's happening behind
+
+The Trick: pulling EXIF data from photos and using ffprobe for video metadata, so files get organized by when they were actually taken, not when you uploaded them.
 
 ## Setup
 
-### Quick setup (recommended)
-Use the automated setup scripts:
+**Important:** Make sure your photos are transferred using a method that preserves EXIF metadata (e.g.):
+- AirDrop
+- Photos app export ("Export Unmodified Original")  
+- iTunes backup extraction
+- Direct cable/file copy
 
-**Debian/Ubuntu:**
+You'll also need:
+- Python 3.7+
+- AWS CLI configured
+- FFmpeg installed
+- Terraform (optional but recommended)
+
+### Quick setup for Linux users
+
+If you're on Ubuntu/Debian, there's a setup script that installs dependencies (including FFmpeg), and creates the S3 Bucket:
+
 ```bash
+cd backup
 chmod +x setup_linux.sh
 ./setup_linux.sh
 ```
-Don't forget to add AWS credentials/Install Python/Terraform!
+
+If you proceed this way, then you can skip Step 3, 4 and 5.
 
 ### Manual setup
 
-#### Prerequisites 
-- Python 3.7+
-- AWS CLI configured with credentials
-- FFmpeg/ffprobe (install separately - not via pip)
-- Terraform (optional, for bucket creation)
-
-#### Install dependencies
+1. **Set up AWS credentials:**
 ```bash
-pip install -r requirements.txt
+aws configure
 ```
 
-#### Install FFmpeg
-**Linux:** `sudo apt install ffmpeg` (Ubuntu) or `sudo yum install ffmpeg` (CentOS)  
-**Mac:** `brew install ffmpeg`  
-**Windows:** `choco install ffmpeg` or download from ffmpeg.org
-
-### Configure
-1. Update `filepath_root` in upload.py to point to your photo folder
-2. Either:
-   - Use Terraform to create bucket (recommended), OR
-   - Set `fallback_bucket_name` in the script to your bucket name
-
-### Using with Terraform (recommended)
+2. **Clone this repo:**
 ```bash
-cd terraform/
+git clone https://github.com/pala3232/iosglacierbackups.git
+cd iosglacierbackups
+```
+
+3. **Install FFmpeg:**
+
+Windows: `choco install ffmpeg` or download from ffmpeg.org
+macOS: `brew install ffmpeg`
+Linux: `sudo apt install ffmpeg`
+
+4. **Install Python dependencies:**
+```bash
+pip install -r backup/requirements.txt
+```
+
+5. **Create S3 bucket:**
+```bash
+cd terraform
 terraform init
 terraform apply
-cd ../backup/
+cd ../backup
+```
+
+6. **Edit the config:**
+Open `backup/upload.py` and change these:
+
+```python
+# Point this to your photos folder
+filepath_root = 'C:/Users/YourName/Pictures/iOS Photos'
+
+# If you didn't use terraform, set a bucket name
+fallback_bucket_name = 'your-backup-bucket-name'
+```
+
+## Running it
+
+```bash
+cd backup
 python upload.py
 ```
 
-### Manual setup
-If you don't want to use Terraform, just set the bucket name in upload.py:
-```python
-fallback_bucket_name = 'your-bucket-name-here'  
-```
-Note: Storage Class can also be set up with the storage_class variable. Default value is 'DEEP_ARCHIVE'.
-## File organization in S3
+It'll scan your photos, check what's already in S3, and upload the new stuff. Progress gets printed to console and logged to files.
+
+You get these log files:
+- `successful-uploads.log` - successfully uploaded files
+- `failed-uploads.log` - upload failures with error details
+- `backup.log` - detailed execution log
+- `currentfilesinbucket.log` - existing S3 bucket contents
+
+## How files get organized
+
+Everything goes into a clean structure:
 ```
 ios/
-  2023/
+  2025/
     01/
-      2023-01-15_14-30-45_IMG_1234.jpg
-      2023-01-15_16-22-10_VID_5678.mp4
-  2024/
-    12/
-      2024-12-25_10-15-30_christmas.heic
+      2025-01-15_14-30-22_IMG_001.jpg
+      2025-01-15_14-31-45_VID_002.mp4
+    02/
+  2026/
 ```
 
-## Notes
-- Uses Deep Archive storage class (cheap but slow retrieval)
-- Creates log files for tracking uploads/failures  
-- Handles timezone info in video metadata
-- Falls back to file modification time if no metadata found
+## Storage costs
 
-## Logs
-- `backup.log` - Main application log
-- `successful-uploads.log` - List of uploaded files
-- `failed-uploads.log` - Failed upload attempts
+I use Glacier Deep Archive because it's EXTREMELY cost-effective - about $0.00099/GB/month. That's around $1/month for 1TB.
 
-## Todo
-- Add retry logic for S3 failures
-- Progress bar for large uploads
-- Email notifications when done
+The tradeoff is retrieval takes 12+ hours, but for long-term photo backup that's fine. If you need faster access, change `storage_class` to `GLACIER` or `STANDARD_IA`. This will bring higher retrieval-storage costs but you can have faster access.
+
+## Troubleshooting
+
+**FFprobe not found:** Install FFmpeg and make sure it's in your PATH. Test with `ffprobe -version`
+
+**AWS errors:** Run `aws configure` or check your environment variables
+
+**Terraform issues:** Make sure you're running from the backup directory, or just set `fallback_bucket_name` manually
+
+**Permission errors:** Your AWS user needs S3 access. Here's the basic policy:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:DeleteObject",
+                "s3:ListBucket"
+            ],
+            "Resource": [
+                "arn:aws:s3:::your-backup-bucket",
+                "arn:aws:s3:::your-backup-bucket/*"
+            ]
+        }
+    ]
+}
+```
+
+## Technical details
+
+- Uses boto3 for AWS access
+- PIL/Pillow for EXIF data
+- FFprobe for video metadata
+- Terraform for infrastructure
+- Automatic multipart uploads for big files
+
+The script is smart about duplicate detection - it lists everything already in your bucket first, then only uploads new files. So you can run it multiple times safely.
+
+## Getting your photos back
+
+To retrieve photos from Glacier Deep Archive:
+1. Initiate restore via AWS Console: "Restore from Glacier Deep Archive"
+2. Wait 12+ hours for restoration
+3. Download files when ready
+
+Cost: ~$0.02/GB for retrieval requests.
+
+## Performance
+
+- Upload speed depends on your internet connection
+- Handles files of any size via automatic multipart upload
+- Metadata extraction adds minimal overhead (~1-2 seconds per 1000 files)
+
+## What it doesn't do
+
+- No direct iPhone integration (files must be on computer first)
+- No automatic backup scheduling (run manually or via cron)
+- No file compression (uploads original files)
